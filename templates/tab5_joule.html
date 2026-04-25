@@ -1,0 +1,123 @@
+<div class="card">
+    <div class="card-title"> Коэффициент Джоуля-Томсона</div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div>
+            <label>Начальное давление P₁ (МПа):</label>
+            <input type="number" id="P1" step="0.1" value="15">
+            
+            <label style="margin-top: 12px;">Конечное давление P₂ (МПа):</label>
+            <input type="number" id="P2" step="0.1" value="5">
+        </div>
+        <div>
+            <label>Начальная температура T₁ (К):</label>
+            <input type="number" id="T1" step="1" value="320">
+        </div>
+    </div>
+    
+    <button id="calc-joule-btn" style="margin-top: 20px;">🧮 Рассчитать</button>
+</div>
+
+<div class="card">
+    <div class="card-title">📊 Результаты</div>
+    <div id="joule-results">
+        <div class="result-item"><strong>Среднее приведённое давление Pпр.ср:</strong> <span id="Ppr_avg">—</span></div>
+        <div class="result-item"><strong>Коэффициент Джоуля-Томсона Di:</strong> <span id="Di">—</span> К/МПа</div>
+        <div class="result-item"><strong>Перепад температуры ΔT:</strong> <span id="delta_T">—</span> К</div>
+        <div class="result-item"><strong>Конечная температура T₂:</strong> <span id="T2">—</span> К (<span id="T2_C">—</span> °C)</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">📄 Экспорт отчёта</div>
+    <button id="export-pdf-btn" style="background: #28a745;">📥 Экспорт в PDF</button>
+</div>
+
+<script>
+// Функция для получения всех данных из sessionStorage и DOM
+function collectAllData() {
+    // Получаем состав
+    let composition = {};
+    try {
+        composition = JSON.parse(sessionStorage.getItem('composition') || '{}');
+    } catch(e) { console.error(e); }
+    
+    // Получаем все значения из sessionStorage
+    const data = {
+        composition: composition,
+        P: sessionStorage.getItem('P') || '—',
+        T: sessionStorage.getItem('T') || '—',
+        Msm: sessionStorage.getItem('Msm') || '—',
+        rho_bar: sessionStorage.getItem('rho_bar') || '—',
+        rho_std: sessionStorage.getItem('rho_std') || '—',
+        P_kr: sessionStorage.getItem('P_kr') || '—',
+        T_kr: sessionStorage.getItem('T_kr') || '—',
+        Ppr: sessionStorage.getItem('Ppr') || '—',
+        Tpr: sessionStorage.getItem('Tpr') || '—',
+        Z: sessionStorage.getItem('Z') || '—',
+        all_Z: {},
+        density: document.getElementById('density')?.textContent || sessionStorage.getItem('density') || '—',
+        viscosity: document.getElementById('viscosity')?.textContent || sessionStorage.getItem('viscosity') || '—',
+        cp: document.getElementById('cp')?.textContent || sessionStorage.getItem('cp') || '—',
+        lambda: document.getElementById('lambda')?.textContent || sessionStorage.getItem('lambda') || '—',
+        water: document.getElementById('water')?.textContent || sessionStorage.getItem('water') || '—',
+        Di: document.getElementById('Di')?.textContent || sessionStorage.getItem('Di') || '—',
+        delta_T: document.getElementById('delta_T')?.textContent || sessionStorage.getItem('delta_T') || '—',
+        T2: document.getElementById('T2')?.textContent || sessionStorage.getItem('T2') || '—',
+        T2_C: document.getElementById('T2_C')?.textContent || sessionStorage.getItem('T2_C') || '—'
+    };
+    
+    // Получаем all_Z
+    try {
+        data.all_Z = JSON.parse(sessionStorage.getItem('all_Z') || '{}');
+    } catch(e) { console.error(e); }
+    
+    return data;
+}
+
+// Расчёт Джоуля-Томсона
+document.getElementById('calc-joule-btn').onclick = async () => {
+    const composition = JSON.parse(sessionStorage.getItem('composition') || '{}');
+    const P1 = parseFloat(document.getElementById('P1').value);
+    const P2 = parseFloat(document.getElementById('P2').value);
+    const T1 = parseFloat(document.getElementById('T1').value);
+    const Z = parseFloat(sessionStorage.getItem('Z') || 0.874);
+    
+    const response = await fetch('/calculate_joule', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({composition: composition, P1: P1, P2: P2, T1: T1, Z: Z})
+    });
+    const data = await response.json();
+    
+    document.getElementById('Ppr_avg').textContent = data.Ppr_avg.toFixed(3);
+    document.getElementById('Di').textContent = data.Di.toFixed(3);
+    document.getElementById('delta_T').textContent = data.delta_T.toFixed(3);
+    document.getElementById('T2').textContent = data.T2.toFixed(3);
+    document.getElementById('T2_C').textContent = data.T2_C.toFixed(3);
+    
+    sessionStorage.setItem('Di', data.Di);
+    sessionStorage.setItem('delta_T', data.delta_T);
+    sessionStorage.setItem('T2', data.T2);
+    sessionStorage.setItem('T2_C', data.T2_C);
+};
+
+// Экспорт в PDF
+document.getElementById('export-pdf-btn').onclick = async () => {
+    const reportData = collectAllData();
+    
+    const response = await fetch('/export_pdf', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(reportData)
+    });
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'report_gas_calculator.pdf';
+    a.click();
+    window.URL.revokeObjectURL(url);
+};
+</script>

@@ -1,0 +1,182 @@
+<div class="card">
+    <div class="card-title">🌡️ Давление, температура и критические параметры</div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div>
+            <label>Давление P (МПа):</label>
+            <input type="number" id="pressure" step="0.1" value="15" min="0.1" oninput="fixPressureOnInput()">
+            
+            <label style="margin-top: 12px;">Температура T:</label>
+            <input type="number" id="temperature" step="1" value="320" min="0.01" oninput="fixTemperatureOnInput()">
+            
+            <label style="margin-top: 12px; display: flex; align-items: center;">
+                <input type="checkbox" id="use-celsius" style="width: auto; margin-right: 8px;">
+                Использовать градусы Цельсия
+            </label>
+        </div>
+        
+        <div>
+            <label>Метод расчёта критических параметров:</label>
+            <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">
+                <label style="display: flex; align-items: center;">
+                    <input type="radio" name="crit_method" value="kay" checked style="width: auto; margin-right: 8px;">
+                    По составу (правило Кэя)
+                </label>
+                <label style="display: flex; align-items: center;">
+                    <input type="radio" name="crit_method" value="density" style="width: auto; margin-right: 8px;">
+                    По относительной плотности
+                </label>
+            </div>
+        </div>
+    </div>
+    
+    <button id="calc-critical-btn" style="margin-top: 20px;">🔍 Рассчитать</button>
+</div>
+
+<div class="card">
+    <div class="card-title">📊 Результаты</div>
+    <div id="critical-results">
+        <div class="result-item"><strong>Псевдокритическое давление Pкр:</strong> <span id="P_kr">—</span> МПа</div>
+        <div class="result-item"><strong>Псевдокритическая температура Tкр:</strong> <span id="T_kr">—</span> К</div>
+        <div class="result-item"><strong>Приведённое давление Pпр:</strong> <span id="Ppr">—</span></div>
+        <div class="result-item"><strong>Приведённая температура Tпр:</strong> <span id="Tpr">—</span></div>
+    </div>
+</div>
+
+<script>
+// Исправление давления при вводе
+function fixPressureOnInput() {
+    let input = document.getElementById('pressure');
+    let val = parseFloat(input.value);
+    if (isNaN(val) || val < 0.1) {
+        input.value = 0.1;
+    }
+}
+
+// Исправление температуры при вводе
+function fixTemperatureOnInput() {
+    let input = document.getElementById('temperature');
+    let val = parseFloat(input.value);
+    let isCelsius = document.getElementById('use-celsius').checked;
+    
+    if (isNaN(val)) return;
+    
+    if (isCelsius) {
+        if (val < -273.14) input.value = -273.14;
+    } else {
+        if (val < 0.01) input.value = 0.01;
+    }
+}
+
+// Исправление давления при потере фокуса
+function fixPressureOnBlur() {
+    let input = document.getElementById('pressure');
+    let val = parseFloat(input.value);
+    
+    if (isNaN(val) || val < 0.1) {
+        input.value = 0.1;
+        alert("Давление не может быть меньше 0.1 МПа. Установлено 0.1");
+    }
+}
+
+// Исправление температуры при потере фокуса
+function fixTemperatureOnBlur() {
+    let input = document.getElementById('temperature');
+    let val = parseFloat(input.value);
+    let isCelsius = document.getElementById('use-celsius').checked;
+    
+    if (isNaN(val)) {
+        if (isCelsius) {
+            input.value = 20;
+            alert("Установлена температура 20 °C");
+        } else {
+            input.value = 293.15;
+            alert("Установлена температура 293.15 К");
+        }
+        return;
+    }
+    
+    if (isCelsius) {
+        if (val < -273.14) {
+            input.value = -273.14;
+            alert("Температура не может быть ниже -273.15 °C. Установлено -273.14");
+        }
+    } else {
+        if (val < 0.01) {
+            input.value = 0.01;
+            alert("Температура не может быть ниже 0.01 К. Установлено 0.01");
+        }
+    }
+}
+
+// Динамическое изменение min для поля температуры
+function updateTemperatureMin() {
+    let tempInput = document.getElementById('temperature');
+    let isCelsius = document.getElementById('use-celsius').checked;
+    
+    if (isCelsius) {
+        tempInput.min = -273.14;
+        tempInput.step = 0.1;
+    } else {
+        tempInput.min = 0.01;
+        tempInput.step = 1;
+    }
+}
+
+// Вешаем обработчики (один раз)
+document.getElementById('pressure').addEventListener('blur', fixPressureOnBlur);
+document.getElementById('temperature').addEventListener('blur', fixTemperatureOnBlur);
+
+// При смене чекбокса — обновляем min и исправляем температуру
+document.getElementById('use-celsius').onchange = function() {
+    updateTemperatureMin();
+    fixTemperatureOnBlur();
+};
+
+// Инициализация при загрузке страницы
+updateTemperatureMin();
+
+// Кнопка Рассчитать
+document.getElementById('calc-critical-btn').onclick = () => {
+    // Принудительно исправляем перед отправкой
+    fixPressureOnBlur();
+    fixTemperatureOnBlur();
+    
+    let P = parseFloat(document.getElementById('pressure').value);
+    let T_input = parseFloat(document.getElementById('temperature').value);
+    let isCelsius = document.getElementById('use-celsius').checked;
+    
+    let T_kelvin = isCelsius ? T_input + 273.15 : T_input;
+    
+    const composition = JSON.parse(sessionStorage.getItem('composition') || '{}');
+    const method = document.querySelector('input[name="crit_method"]:checked').value;
+    
+    fetch('/calculate_critical', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({composition: composition, P: P, T: T_kelvin, method: method})
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById('P_kr').textContent = data.P_kr.toFixed(3);
+        document.getElementById('T_kr').textContent = data.T_kr.toFixed(3);
+        document.getElementById('Ppr').textContent = data.Ppr.toFixed(3);
+        document.getElementById('Tpr').textContent = data.Tpr.toFixed(3);
+        
+        sessionStorage.setItem('P_kr', data.P_kr);
+        sessionStorage.setItem('T_kr', data.T_kr);
+        sessionStorage.setItem('Ppr', data.Ppr);
+        sessionStorage.setItem('Tpr', data.Tpr);
+        sessionStorage.setItem('P', P);
+        sessionStorage.setItem('T', T_kelvin);
+    });
+};
+
+// При загрузке показываем сохранённые значения
+if (sessionStorage.getItem('P_kr')) {
+    document.getElementById('P_kr').textContent = sessionStorage.getItem('P_kr');
+    document.getElementById('T_kr').textContent = sessionStorage.getItem('T_kr');
+    document.getElementById('Ppr').textContent = sessionStorage.getItem('Ppr');
+    document.getElementById('Tpr').textContent = sessionStorage.getItem('Tpr');
+}
+</script>

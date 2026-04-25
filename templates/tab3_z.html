@@ -1,0 +1,173 @@
+<div class="card">
+    <div class="card-title">🔬 Коэффициент сверхсжимаемости Z</div>
+    
+    <div id="z-methods">
+        <div style="margin-bottom: 12px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="radio" name="z_method" value="1" checked style="width: 18px; height: 18px; margin: 0;"> 
+                <span style="font-size: 15px;">Метод 1: Браун-Катц (графики)</span>
+            </label>
+            <div style="margin-left: 28px; font-size: 12px; color: #666;">C5+ < 2%, ароматика < 2%, кислые < 5%</div>
+        </div>
+        <div style="margin-bottom: 12px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="radio" name="z_method" value="2" style="width: 18px; height: 18px; margin: 0;"> 
+                <span style="font-size: 15px;">Метод 2: Гуревич-Латонов (аппроксимация)</span>
+            </label>
+            <div style="margin-left: 28px; font-size: 12px; color: #666;">оценочные расчёты</div>
+        </div>
+        <div style="margin-bottom: 12px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="radio" name="z_method" value="3" style="width: 18px; height: 18px; margin: 0;"> 
+                <span style="font-size: 15px;">Метод 3: Двухпараметрический (с учётом N₂, CO₂, H₂S)</span>
+            </label>
+            <div style="margin-left: 28px; font-size: 12px; color: #666;">неуглеводороды < 10%</div>
+        </div>
+        <div style="margin-bottom: 12px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="radio" name="z_method" value="4" style="width: 18px; height: 18px; margin: 0;"> 
+                <span style="font-size: 15px;">Метод 4: Пенг-Робинсон (кубическое уравнение)</span>
+            </label>
+            <div style="margin-left: 28px; font-size: 12px; color: #666;">универсальный, рекомендуется для точных расчётов</div>
+        </div>
+        <div style="margin-bottom: 12px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="radio" name="z_method" value="5" style="width: 18px; height: 18px; margin: 0;"> 
+                <span style="font-size: 15px;">Метод 5: Редлих-Квонг (кубическое уравнение)</span>
+            </label>
+            <div style="margin-left: 28px; font-size: 12px; color: #666;">универсальный, альтернативный</div>
+        </div>
+        <div style="margin-bottom: 12px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="radio" name="z_method" value="6" style="width: 18px; height: 18px; margin: 0;"> 
+                <span style="font-size: 15px;">Метод 6: Трёхпараметрический (с фактором ацентричности)</span>
+            </label>
+            <div style="margin-left: 28px; font-size: 12px; color: #666;">C5+ > 2% или полярные компоненты > 5%</div>
+        </div>
+        
+        <!-- Радиокнопка для сравнения методов -->
+        <div style="margin-top: 20px; padding-top: 12px; border-top: 1px solid #dee2e6;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="radio" name="z_method" value="compare" id="compare-methods-radio" style="width: 18px; height: 18px; margin: 0;"> 
+                <span style="font-size: 15px; font-weight: 500;">📊 Сравнить все методы</span>
+            </label>
+            <div style="margin-left: 28px; font-size: 12px; color: #666;">показать таблицу сравнения всех шести методов</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">📊 Результаты</div>
+    <div id="z-results">
+        <div class="result-item"><strong>Выбранный метод:</strong> <span id="selected-method">—</span></div>
+        <div class="result-item"><strong>Z =</strong> <span id="Z_value">—</span></div>
+    </div>
+</div>
+
+<div class="card" id="compare-card" style="display: none;">
+    <div class="card-title">📈 Сравнение всех методов</div>
+    <table class="table" id="compare-table">
+        <thead>
+            <tr><th>Метод</th><th>Z</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>1. Браун-Катц</td><td id="compare1">—</td></tr>
+            <tr><td>2. Гуревич-Латонов</td><td id="compare2">—</td></tr>
+            <tr><td>3. Двухпараметрический</td><td id="compare3">—</td></tr>
+            <tr><td>4. Пенг-Робинсон</td><td id="compare4">—</td></tr>
+            <tr><td>5. Редлих-Квонг</td><td id="compare5">—</td></tr>
+            <tr><td>6. Трёхпараметрический</td><td id="compare6">—</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+// Переменная для хранения результатов всех методов
+let allMethodsResults = null;
+
+// Функция расчёта Z
+async function calculateZ() {
+    const composition = JSON.parse(sessionStorage.getItem('composition') || '{}');
+    const P = parseFloat(sessionStorage.getItem('P') || 15);
+    const T = parseFloat(sessionStorage.getItem('T') || 320);
+    
+    const response = await fetch('/calculate_z', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({composition: composition, P: P, T: T})
+    });
+    const data = await response.json();
+    
+    // Сохраняем результаты всех методов
+    allMethodsResults = data.results;
+    
+    // Обновляем таблицу сравнения
+    document.getElementById('compare1').textContent = data.results.method1.toFixed(3);
+    document.getElementById('compare2').textContent = data.results.method2.toFixed(3);
+    document.getElementById('compare3').textContent = data.results.method3.toFixed(3);
+    document.getElementById('compare4').textContent = data.results.method4.toFixed(3);
+    document.getElementById('compare5').textContent = data.results.method5.toFixed(3);
+    document.getElementById('compare6').textContent = data.results.method6.toFixed(3);
+    
+    // Обновляем интерфейс в зависимости от выбранного метода
+    const methodRadio = document.querySelector('input[name="z_method"]:checked');
+    const method = methodRadio ? methodRadio.value : '1';
+    updateUIForMethod(method);
+    
+    // Сохраняем выбранный Z для других вкладок
+    if (method !== 'compare') {
+        const methodMap = {1: 'method1', 2: 'method2', 3: 'method3', 4: 'method4', 5: 'method5', 6: 'method6'};
+        const selectedZ = data.results[methodMap[method]];
+        sessionStorage.setItem('Z', selectedZ);
+    } else {
+        // Для сравнения берём метод 4 как рекомендуемый
+        sessionStorage.setItem('Z', data.results.method4);
+    }
+    sessionStorage.setItem('all_Z', JSON.stringify(data.results));
+}
+
+// Функция обновления интерфейса в зависимости от выбранного метода
+function updateUIForMethod(methodValue) {
+    const compareCard = document.getElementById('compare-card');
+    
+    if (methodValue === 'compare') {
+        if (compareCard) compareCard.style.display = 'block';
+        document.getElementById('selected-method').textContent = 'Сравнение всех методов';
+        if (allMethodsResults) {
+            document.getElementById('compare1').textContent = allMethodsResults.method1.toFixed(3);
+            document.getElementById('compare2').textContent = allMethodsResults.method2.toFixed(3);
+            document.getElementById('compare3').textContent = allMethodsResults.method3.toFixed(3);
+            document.getElementById('compare4').textContent = allMethodsResults.method4.toFixed(3);
+            document.getElementById('compare5').textContent = allMethodsResults.method5.toFixed(3);
+            document.getElementById('compare6').textContent = allMethodsResults.method6.toFixed(3);
+            document.getElementById('Z_value').textContent = '—';
+        }
+    } else {
+        if (compareCard) compareCard.style.display = 'none';
+        const methodNames = {1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6'};
+        document.getElementById('selected-method').textContent = methodNames[methodValue] || methodValue;
+        if (allMethodsResults) {
+            const methodMap = {1: 'method1', 2: 'method2', 3: 'method3', 4: 'method4', 5: 'method5', 6: 'method6'};
+            const selectedZ = allMethodsResults[methodMap[methodValue]];
+            document.getElementById('Z_value').textContent = selectedZ.toFixed(3);
+        }
+    }
+}
+
+// Обработчик изменения радиокнопки
+document.querySelectorAll('input[name="z_method"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        if (allMethodsResults) {
+            updateUIForMethod(this.value);
+        } else {
+            // Если ещё нет результатов, запускаем расчёт
+            calculateZ();
+        }
+    });
+});
+
+// При загрузке страницы автоматически рассчитываем Z
+document.addEventListener('DOMContentLoaded', () => {
+    calculateZ();
+});
+</script>

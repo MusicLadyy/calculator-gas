@@ -1,0 +1,348 @@
+<div class="card">
+    <div class="card-title">📊 Состав газа</div>
+    
+    <div id="composition-table">
+        <table class="table" id="comp-table">
+            <thead>
+                <tr>
+                    <th>Компонент</th>
+                    <th>Мольная доля</th>
+                    <th>Массовая доля</th>
+                    <th>Молекулярная масса (кг/кмоль)</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="comp-tbody">
+                <!-- Строки добавляются через JS -->
+            </tbody>
+        </table>
+    </div>
+    
+    <div style="margin-top: 12px;">
+        <button type="button" id="add-component-btn">➕ Добавить компонент</button>
+        <button type="button" id="save-composition-btn" style="margin-left: 12px;">💾 Сохранить</button>
+    </div>
+    
+    <div id="sum-check" style="margin-top: 16px; font-weight: bold;">
+        Контроль суммы: <span id="sum-value">0.00</span>%
+        <span id="sum-warning" style="color: red; display: none;"></span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">📌 Результаты</div>
+    <div id="comp-results">
+        <div class="result-item"><strong>Молекулярная масса смеси Mсм:</strong> <span id="Msm">—</span> кг/кмоль</div>
+        <div class="result-item"><strong>Относительная плотность ρ̅:</strong> <span id="rho_bar">—</span></div>
+        <div class="result-item"><strong>Плотность при стандартных условиях ρст:</strong> <span id="rho_std">—</span> кг/м³</div>
+    </div>
+</div>
+
+<script>
+// Список доступных компонентов из сервера
+const componentsList = {{ components | tojson }};
+const componentsData = {};
+
+// Показать всплывающее уведомление
+function showNotification(message, type = 'warning') {
+    const existing = document.querySelector('.toast-notification');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.className = `toast-notification ${type}`;
+    toast.innerHTML = `
+        <span class="message">⚠️ ${message}</span>
+        <button class="btn-ok">OK</button>
+    `;
+    document.body.appendChild(toast);
+    
+    toast.querySelector('.btn-ok').onclick = () => toast.remove();
+    
+    setTimeout(() => {
+        if (toast.parentNode) toast.remove();
+    }, 5000);
+}
+
+// Загружаем справочные данные компонентов
+async function loadComponentsData() {
+    const response = await fetch('/get_components_data');
+    const data = await response.json();
+    Object.assign(componentsData, data);
+}
+
+// Получить список уже выбранных компонентов
+function getSelectedComponents() {
+    const selected = [];
+    const selects = document.querySelectorAll('#comp-tbody .comp-select');
+    for (let sel of selects) {
+        if (sel.value) {
+            selected.push(sel.value);
+        }
+    }
+    return selected;
+}
+
+// Обновить все выпадающие списки (скрыть уже выбранные компоненты)
+function updateAllSelects() {
+    const selectedComponents = getSelectedComponents();
+    const selects = document.querySelectorAll('#comp-tbody .comp-select');
+    
+    for (let select of selects) {
+        const currentValue = select.value;
+        const options = select.querySelectorAll('option');
+        for (let opt of options) {
+            const optValue = opt.value;
+            if (optValue && selectedComponents.includes(optValue) && optValue !== currentValue) {
+                opt.style.display = 'none';
+            } else {
+                opt.style.display = '';
+            }
+        }
+    }
+}
+
+// Создать выпадающий список
+function createSelect(selectedComponent = '') {
+    const select = document.createElement('select');
+    select.className = 'comp-select';
+    select.innerHTML = '<option value="">— Выберите —</option>';
+    
+    for (const comp of componentsList) {
+        select.innerHTML += `<option value="${comp}" ${comp === selectedComponent ? 'selected' : ''}>${comp}</option>`;
+    }
+    
+    return select;
+}
+
+// Добавить строку в таблицу
+function addCompositionRow(component = '', moleFraction = '') {
+    if (component) {
+        const selected = getSelectedComponents();
+        if (selected.includes(component)) {
+            showNotification(`Компонент ${component} уже добавлен!`, 'warning');
+            return;
+        }
+    }
+    
+    const tbody = document.getElementById('comp-tbody');
+    const row = tbody.insertRow();
+    
+    // Компонент (выпадающий список)
+    const cellComp = row.insertCell(0);
+    const select = createSelect(component);
+    cellComp.appendChild(select);
+    
+    // Мольная доля
+    const cellMole = row.insertCell(1);
+    const moleInput = document.createElement('input');
+    moleInput.type = 'number';
+    moleInput.step = '0.000001';
+    moleInput.min = 0;
+    moleInput.max = 1;
+    moleInput.value = moleFraction ? parseFloat(moleFraction).toFixed(6) : '';
+    moleInput.className = 'mole-input';
+    cellMole.appendChild(moleInput);
+    
+    // Массовая доля (только для отображения)
+    const cellMass = row.insertCell(2);
+    const massSpan = document.createElement('span');
+    massSpan.className = 'mass-value';
+    massSpan.textContent = '—';
+    cellMass.appendChild(massSpan);
+    
+    // Молекулярная масса
+    const cellMi = row.insertCell(3);
+    cellMi.textContent = component ? (componentsData[component]?.M || '—') : '—';
+    cellMi.className = 'mi-value';
+    
+    // Кнопка удаления
+    const cellDel = row.insertCell(4);
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '🗑️';
+    delBtn.style.background = '#dc3545';
+    delBtn.style.padding = '4px 8px';
+    delBtn.onclick = () => {
+        row.remove();
+        updateAllSelects();
+        updateSumDisplay();
+    };
+    cellDel.appendChild(delBtn);
+    
+    // Обновляем при смене компонента
+    select.onchange = () => {
+        const comp = select.value;
+        cellMi.textContent = comp ? (componentsData[comp]?.M || '—') : '—';
+        updateAllSelects();
+        updateSumDisplay();
+    };
+    
+    moleInput.oninput = () => updateSumDisplay();
+    
+    updateAllSelects();
+    updateSumDisplay();
+}
+
+// Получить сумму мольных долей
+function getMoleSum() {
+    let sum = 0;
+    const rows = document.querySelectorAll('#comp-tbody tr');
+    for (const row of rows) {
+        const moleInput = row.querySelector('.mole-input');
+        if (moleInput && moleInput.value !== '') {
+            const val = parseFloat(moleInput.value);
+            if (!isNaN(val)) {
+                sum += val;
+            }
+        }
+    }
+    return sum;
+}
+
+// Получить состав из таблицы
+function getCompositionFromTable() {
+    const comp = {};
+    const rows = document.querySelectorAll('#comp-tbody tr');
+    for (const row of rows) {
+        const select = row.querySelector('.comp-select');
+        const moleInput = row.querySelector('.mole-input');
+        const component = select?.value;
+        if (component && moleInput?.value !== '') {
+            const val = parseFloat(moleInput.value);
+            if (!isNaN(val) && val > 0) {
+                comp[component] = val;
+            }
+        }
+    }
+    return comp;
+}
+
+// Обновить отображение суммы
+function updateSumDisplay() {
+    const sum = getMoleSum();
+    const sumPercent = (sum * 100).toFixed(4);
+    document.getElementById('sum-value').textContent = sumPercent;
+    document.getElementById('sum-warning').style.display = 'none';
+}
+
+// Рассчитать массовые доли и обновить таблицу
+function updateMassFractions(composition, Msm) {
+    const rows = document.querySelectorAll('#comp-tbody tr');
+    for (const row of rows) {
+        const select = row.querySelector('.comp-select');
+        const component = select?.value;
+        const moleInput = row.querySelector('.mole-input');
+        const massSpan = row.querySelector('.mass-value');
+        
+        if (component && moleInput && massSpan && Msm > 0 && moleInput.value !== '') {
+            const y = parseFloat(moleInput.value) || 0;
+            const M = componentsData[component]?.M || 0;
+            const g = (y * M) / Msm;
+            massSpan.textContent = g.toFixed(3);
+        }
+    }
+}
+
+// Сохранить состав
+function saveComposition() {
+    // Проверяем все поля
+    let hasError = false;
+    let errorMessage = '';
+    
+    const rows = document.querySelectorAll('#comp-tbody tr');
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const select = row.querySelector('.comp-select');
+        const moleInput = row.querySelector('.mole-input');
+        const component = select?.value;
+        const moleValue = moleInput?.value;
+        
+        if (!component) {
+            hasError = true;
+            errorMessage = 'Выберите компонент для всех строк';
+            break;
+        }
+        
+        if (moleValue === '' || moleValue === null || moleValue === undefined) {
+            hasError = true;
+            errorMessage = 'Заполните все поля мольной доли';
+            break;
+        }
+        
+        let val = parseFloat(moleValue);
+        if (isNaN(val)) {
+            hasError = true;
+            errorMessage = 'Мольная доля должна быть числом';
+            break;
+        }
+        
+        if (val < 0 || val > 1) {
+            hasError = true;
+            errorMessage = 'Мольная доля должна быть в диапазоне от 0 до 1';
+            break;
+        }
+    }
+    
+    if (hasError) {
+        showNotification(errorMessage, 'warning');
+        return;
+    }
+    
+    // Проверка суммы
+    const composition = getCompositionFromTable();
+    let sum = 0;
+    for (let val of Object.values(composition)) {
+        sum += val;
+    }
+    
+    if (Math.abs(sum - 1) > 0.001) {
+        showNotification(`Сумма мольных долей должна быть 100% (сейчас ${(sum*100).toFixed(2)}%)`, 'warning');
+        return;
+    }
+    
+    // Отправка на сервер
+    fetch('/calculate_composition', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({composition: composition})
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById('Msm').textContent = data.Msm.toFixed(3);
+        document.getElementById('rho_bar').textContent = data.rho_bar.toFixed(3);
+        document.getElementById('rho_std').textContent = data.rho_std.toFixed(3);
+        
+        updateMassFractions(composition, data.Msm);
+        
+        sessionStorage.setItem('composition', JSON.stringify(composition));
+        sessionStorage.setItem('Msm', data.Msm);
+        sessionStorage.setItem('rho_bar', data.rho_bar);
+        sessionStorage.setItem('rho_std', data.rho_std);
+        sessionStorage.setItem('P_kr', data.P_kr);
+        sessionStorage.setItem('T_kr', data.T_kr);
+        sessionStorage.setItem('omega_cm', data.omega_cm);
+        
+        showNotification('Состав успешно сохранён!', 'success');
+    })
+    .catch(err => {
+        console.error(err);
+        showNotification('Ошибка при сохранении состава', 'error');
+    });
+}
+
+// Инициализация
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadComponentsData();
+    
+    // Добавляем стандартные строки
+    const defaultComponents = ['CH4', 'C2H6', 'C3H8', 'C4H10', 'C5H12', 'C6H14', 'N2', 'CO2'];
+    const defaultFractions = [0.90, 0.04, 0.02, 0.01, 0.01, 0.01, 0.005, 0.005];
+    for (let i = 0; i < defaultComponents.length; i++) {
+        addCompositionRow(defaultComponents[i], defaultFractions[i]);
+    }
+    
+    document.getElementById('add-component-btn').onclick = () => addCompositionRow('', '');
+    document.getElementById('save-composition-btn').onclick = saveComposition;
+    
+    updateSumDisplay();
+});
+</script>

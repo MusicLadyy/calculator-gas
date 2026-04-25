@@ -1,0 +1,45 @@
+<div class="card">
+    <div class="card-title">📊 Физические свойства газа</div>
+    
+    <button id="calc-properties-btn" style="margin-bottom: 20px;">🔧 Рассчитать все свойства</button>
+    
+    <div id="properties-results">
+        <div class="result-item"><strong>Плотность ρ(P,T):</strong> <span id="density">—</span> кг/м³</div>
+        <div class="result-item"><strong>Вязкость μ(P,T):</strong> <span id="viscosity">—</span> мПа·с</div>
+        <div class="result-item"><strong>Теплоёмкость Cp:</strong> <span id="cp">—</span> кДж/(кг·К)</div>
+        <div class="result-item"><strong>Теплопроводность λ:</strong> <span id="lambda">—</span> Вт/(м·К)</div>
+        <div class="result-item"><strong>Влагосодержание W:</strong> <span id="water">—</span> г/м³</div>
+    </div>
+</div>
+
+<script>
+document.getElementById('calc-properties-btn').onclick = async () => {
+    const composition = JSON.parse(sessionStorage.getItem('composition') || '{}');
+    const P = parseFloat(sessionStorage.getItem('P') || 15);
+    const T = parseFloat(sessionStorage.getItem('T') || 320);
+    const Z = parseFloat(sessionStorage.getItem('Z') || 0.874);
+    
+    const response = await fetch('/calculate_properties', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({composition: composition, P: P, T: T, Z: Z})
+    });
+    const data = await response.json();
+    
+    document.getElementById('density').textContent = data.density;
+    document.getElementById('viscosity').textContent = data.viscosity;
+    document.getElementById('cp').textContent = data.Cp;
+    document.getElementById('water').textContent = data.water_content;
+    
+    const Ppr = parseFloat(sessionStorage.getItem('Ppr') || 3.25);
+    const lambda = 0.034 * (1 + 0.3 * Ppr);
+    document.getElementById('lambda').textContent = lambda.toFixed(4);
+    
+    // Сохраняем в sessionStorage для PDF
+    sessionStorage.setItem('density', data.density);
+    sessionStorage.setItem('viscosity', data.viscosity);
+    sessionStorage.setItem('cp', data.Cp);
+    sessionStorage.setItem('lambda', lambda.toFixed(4));
+    sessionStorage.setItem('water', data.water_content);
+};
+</script>
